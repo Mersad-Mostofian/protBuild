@@ -9,3 +9,8 @@ __pycache__/
 ml/checkpoints/
 *.pth
 
+# Datasets
+datasets/converted/
+datasets/uniprot/
+*.fasta
+*.csv
