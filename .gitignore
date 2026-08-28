@@ -1,0 +1,11 @@
+# Environment
+.env
+
+# Python
+.venv/
+__pycache__/
+
+# Model chaeckpoints
+ml/checkpoints/
+*.pth
+
