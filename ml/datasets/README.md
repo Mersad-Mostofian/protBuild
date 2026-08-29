@@ -8,7 +8,7 @@
 
 **Download:**
 
-[UniProtKB/Swiss-Prot FTP](https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/?utm_source=chatgpt.com)
+[UniProtKB/Swiss-Prot FTP](https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/)
 
 **Main FASTA file:**
 
@@ -38,7 +38,7 @@ gunzip uniprot_sprot.fasta.gz
 
 **Download:**
 
-[UniRef90 FTP](https://ftp.uniprot.org/pub/databases/uniprot/current_release/uniref/?utm_source=chatgpt.com)
+[UniRef90 FTP](https://ftp.uniprot.org/pub/databases/uniprot/current_release/uniref/)
 
 **Main FASTA files:**
 
@@ -74,7 +74,7 @@ gunzip uniref90.fasta.gz
 
 **Download:**
 
-[UniParc Active FASTA FTP](https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/uniparc/fasta/active/?utm_source=chatgpt.com)
+[UniParc Active FASTA FTP](https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/uniparc/fasta/active/)
 
 **Dataset used in ProtBuild:**
 
