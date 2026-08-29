@@ -2,10 +2,7 @@ import sys, os
 import csv
 import re
 
-
-def parse_header(header: str) -> dict:
-    header = header.lstrip('>')
-
+def uniport_parser(header: str) -> dict:
     parts = header.split('|', 2)
 
     database = parts[0]
@@ -27,22 +24,112 @@ def parse_header(header: str) -> dict:
     gene = extract(r"GN=(.*?)\s+PE=")
     protein_evidence = extract(r"PE=(\d+)")
     sequence_version = extract(r"SV=(\d+)")
+    return {
+            "database": database,
+            "accession": accession,
+            "protein_id": parts[2].split(" ", 1)[0],
+            "protein_name": protein_name,
+            "organism": organism,
+            "taxonomy_id": taxonomy_id,
+            "gene": gene,
+            "protein_evidence": protein_evidence,
+            "sequence_version": sequence_version,
+            "status": "",
+            "cluster_size": "",
+            "representative_id": "",
+    }
 
+
+def uniparc_parser(header: str) -> dict:
+    parts = header.split(maxsplit=1)
+    
+    protein_id = parts[0]
+    status = ''
+
+    if len(parts) > 1:
+        status_match = re.search(r'status=(\S+)', parts[1])
+        if status_match:
+            status = status_match.group(1)
+
+    return {
+        "database": "UniParc",
+        "accession": protein_id,
+        "protein_id": protein_id,
+        "protein_name": "",
+        "organism": "",
+        "taxonomy_id": "",
+        "gene": "",
+        "protein_evidence": "",
+        "sequence_version": "",
+        "status": status,
+        "cluster_size": "",
+        "representative_id": "",
+    }
+
+def uniref_parser(header: str) -> dict:
+    def extract(pattern):
+        match = re.search(pattern, header)
+        return match.group(1) if match else ''
+    
+    accession_match = re.match(r'(UniRef\d+)_(\S+)', header)
+
+    database = ''
+    accession = ''
+
+    if accession_match:
+        database = accession_match.group(1)
+        accession = accession_match.group(2)
+
+    protein_name_match = re.match(
+        r'UniRef\d+_\S+\s+(.+?)\s+n=\d+\s+Tax=',
+        header
+    )
+
+    protein_name = (
+        protein_name_match.group(1).strip()
+        if protein_name_match
+        else ''
+    )
+
+    organism = extract(r'Tax=(.*?)\s+TaxID=')
+    taxonomy_id = extract(r'TaxID=(\d+)')
+    representative_id = extract(r'RepID=(\S+)')
+    cluster_size = extract(r'n=(\d+)')
 
     return {
         "database": database,
         "accession": accession,
-        "protein_id": parts[2].split(" ", 1)[0],
+        "protein_id": accession,
         "protein_name": protein_name,
         "organism": organism,
         "taxonomy_id": taxonomy_id,
-        "gene": gene,
-        "protein_evidence": protein_evidence,
-        "sequence_version": sequence_version,
+        "gene": "",
+        "protein_evidence": "",
+        "sequence_version": "",
+        "status": "",
+        "cluster_size": cluster_size,
+        "representative_id": representative_id,
     }
 
+def parse_header(header: str, dataset_category: str) -> dict:
+    header = header.lstrip('>')
 
-def fasta_to_csv(input_file: str, output_file:str):
+    if dataset_category == 'uniprot':
+        return uniport_parser(header)
+    elif dataset_category == 'uniparc':
+        return uniparc_parser(header)
+    elif dataset_category == 'uniref':
+        return uniref_parser(header)
+    else:
+        raise ValueError(
+            f"Unknown dataset category: {dataset_category}"
+        )
+
+
+    
+
+
+def fasta_to_csv(input_file: str, output_file:str, dataset_category: str):
 
     records = []
 
@@ -58,7 +145,7 @@ def fasta_to_csv(input_file: str, output_file:str):
 
             if line.startswith('>'):
                 if current_header is not None:
-                    record = parse_header(header=current_header)
+                    record = parse_header(header=current_header, dataset_category=dataset_category)
 
                     sequence = "".join(current_sequence)
 
@@ -74,7 +161,7 @@ def fasta_to_csv(input_file: str, output_file:str):
                 current_sequence.append(line)
 
         if current_header is not None:
-            record = parse_header(current_header)
+            record = parse_header(current_header, dataset_category)
             sequence = "".join(current_sequence)
 
             record['sequence'] = sequence
@@ -93,6 +180,9 @@ def fasta_to_csv(input_file: str, output_file:str):
         'sequence_version',
         'sequence',
         'length',
+        'status',
+        'cluster_size',
+        'representative_id',
     ]
 
     with open(output_file, 'w', newline="", encoding='utf-8') as f:
@@ -108,26 +198,51 @@ def fasta_to_csv(input_file: str, output_file:str):
 if __name__ == '__main__':
 
     if len(sys.argv) <= 1:
-        print('\nPlease provice Fasta file.')
-        print('\nUsage:\nparse_fasta.py input.fasta output.csv\n')
-        sys.exit()
+        print('\nPlease provide dataset category and FASTA file.')
+        print('\nUsage:')
+        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv]')
+        sys.exit(1)
 
-    if sys.argv[1] == '-h' or sys.argv[1] == '--help':
-        print('\nUsage:\nparse_fasta.py input.fasta output.csv\n')
-        sys.exit()
+    if sys.argv[1] in ('-h', '--help'):
+        print('\nUsage:')
+        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv]')
+        print('\nDataset categories:')
+        print('  uniprot')
+        print('  uniparc')
+        print('  uniref')
+        sys.exit(0)
 
-    input_file = sys.argv[1]
+    if len(sys.argv) < 3:
+        print('\nError: Dataset category and FASTA file are required.')
+        print('\nUsage:')
+        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv]')
+        sys.exit(1)
+
+    dataset_category = sys.argv[1]
+    input_file = sys.argv[2]
+
+    valid_categories = {
+        'uniprot',
+        'uniparc',
+        'uniref',
+    }
+
+    if dataset_category not in valid_categories:
+        print(f'\nError: Unknown dataset category: {dataset_category}')
+        print(f'Available categories: {", ".join(valid_categories)}')
+        sys.exit(1)
 
     if not os.path.exists(input_file):
-        print(f'\nError: File {input_file} is not exist!')
-        sys.exit()
+        print(f'\nError: File {input_file} does not exist!')
+        sys.exit(1)
 
     output_file = 'output.csv'
 
-    if len(sys.argv) > 2:
-        output_file = sys.argv[2]
+    if len(sys.argv) > 3:
+        output_file = sys.argv[3]
 
     fasta_to_csv(
         input_file=input_file,
-        output_file=output_file
+        output_file=output_file,
+        dataset_category=dataset_category,
     )
