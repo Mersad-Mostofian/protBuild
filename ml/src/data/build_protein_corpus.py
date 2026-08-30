@@ -1,14 +1,12 @@
 import pandas as pd
 import sys, os
 
-def dataset_to_text(dataset_file: str, special_token: str) -> str:
-    df = pd.read_csv(dataset_file)
-    return special_token.join(df['sequence'].tolist())
-
-def write_file(output_file: str, text: str):
-      with open(output_file, 'w') as f:
-            f.write(text)
-
+def dataset_to_corpus(dataset_file: str, output_file: str,special_token: str) -> str:
+    for chunk in pd.read_csv(dataset_file, usecols=['sequence'], chunksize=10_000):
+          with open(output_file, 'a') as f:
+                for seq in chunk['sequence']:
+                    f.write(seq)
+                    f.write(special_token)
 
 if __name__ == '__main__':
     if len(sys.argv) <= 1:
@@ -30,5 +28,5 @@ if __name__ == '__main__':
 
     output_file = sys.argv[2] if len(sys.argv) > 2 else "protein_sequences.txt"
 
-    write_file(output_file,
-                dataset_to_text(input_file, special_token='<|endofprotein|>'))
+    dataset_to_corpus(dataset_file=input_file,
+                       output_file=output_file, special_token='<|endofprotein|>')
