@@ -1,5 +1,5 @@
 from torch import nn
-from ml.src.models.common.transformer.transformer import MultiHeadAttention
+from ml.src.models.common.attention.attention import MultiHeadAttention
 from ml.src.models.common.feed_forward.ff import FeedForward
 from ml.src.models.common.normalization.normalization import Normalization
 
