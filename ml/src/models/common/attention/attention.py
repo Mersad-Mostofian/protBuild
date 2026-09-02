@@ -17,7 +17,7 @@ class MultiHeadAttention(nn.Module):
         self.Wvalue = nn.Linear(d_in, d_out, bias=qkv_bias)
         self.proj = nn.Linear(d_out, d_out)
         self.dropout = nn.Dropout(dropout)
-        self.register_buffer('mask', torch.triu(torch.ones(context_length, context_length), diagonal=1))
+        self.register_buffer('mask', torch.triu(torch.ones(context_length, context_length, dtype=torch.bool), diagonal=1))
     
     def forward(self, x): # x: position embedding + token embedding
         b, num_tokens, d_in = x.shape
@@ -37,8 +37,8 @@ class MultiHeadAttention(nn.Module):
 
         atten_scores = queries @ keys.transpose(2, 3)
 
-        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
-        atten_scores.masked_fill_(mask_bool, -torch.inf)
+        atten_scores.masked_fill_(self.mask[:num_tokens, :num_tokens]
+                                  , -torch.inf)
 
         atten_weight = torch.softmax(atten_scores / keys.shape[-1]**0.5, dim=-1)
         atten_weight = self.dropout(atten_weight)
