@@ -1,6 +1,26 @@
 import sys, os
 import csv
 import re
+from tqdm import tqdm
+
+FIELDNAMES = [
+        'database',
+        'accession',
+        'protein_id',
+        'protein_name',
+        'organism',
+        'taxonomy_id',
+        'gene',
+        'protein_evidence',
+        'sequence_version',
+        'sequence',
+        'length',
+        'status',
+        'cluster_size',
+        'representative_id',
+    ]
+
+CHUNK_SIZE = 5000
 
 def uniport_parser(header: str) -> dict:
     parts = header.split('|', 2)
@@ -125,16 +145,16 @@ def parse_header(header: str, dataset_category: str) -> dict:
             f"Unknown dataset category: {dataset_category}"
         )
 
-
-    
-
-
-def fasta_to_csv(input_file: str, output_file:str, dataset_category: str):
-
-    records = []
-
+def iter_records(input_file: str, dataset_category: str):
     current_header = None
-    current_sequence = []
+    current_sequence_parts = []
+
+    def build_record(header, seq_parts):
+        record = parse_header(header=header, dataset_category=dataset_category)
+        sequence = "".join(seq_parts)
+        record['sequence'] = sequence
+        record['length'] = len(sequence)
+        return record
 
     with open(input_file, 'r') as f:
         for line in f:
@@ -145,53 +165,39 @@ def fasta_to_csv(input_file: str, output_file:str, dataset_category: str):
 
             if line.startswith('>'):
                 if current_header is not None:
-                    record = parse_header(header=current_header, dataset_category=dataset_category)
-
-                    sequence = "".join(current_sequence)
-
-                    record['sequence'] = sequence
-                    record['length'] = len(sequence)
-
-                    records.append(record)
+                    yield build_record(header=current_header, seq_parts=current_sequence_parts)
 
                 current_header = line
-                current_sequence = []
+                current_sequence_parts = []
 
             else:
-                current_sequence.append(line)
-
+                current_sequence_parts.append(line)
         if current_header is not None:
-            record = parse_header(current_header, dataset_category)
-            sequence = "".join(current_sequence)
+            yield build_record(current_header, current_sequence_parts)
 
-            record['sequence'] = sequence
-            record['length'] = len(sequence)
 
-            records.append(record)
-    fieldnames = [
-        'database',
-        'accession',
-        'protein_id',
-        'protein_name',
-        'organism',
-        'taxonomy_id',
-        'gene',
-        'protein_evidence',
-        'sequence_version',
-        'sequence',
-        'length',
-        'status',
-        'cluster_size',
-        'representative_id',
-    ]
 
+def fasta_to_csv(input_file: str, output_file:str, dataset_category: str, chunk_size: int = CHUNK_SIZE):
+    total = 0
+    chunk = []
     with open(output_file, 'w', newline="", encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
-        writer.writerows(records)
 
-    print(f'\nConverted {len(records):,} proteins')
+        with tqdm(desc='Parsing FASTA', unit=' protein', unit_scale=True) as pbar:
+            for record in iter_records(input_file, dataset_category):
+                chunk.append(record)
+                total+=1
+                pbar.update(1)
+                if len(chunk) >= chunk_size:
+                    writer.writerows(chunk)
+                    f.flush()
+                    chunk.clear()
+            if chunk:
+                writer.writerows(chunk)
+                f.flush()
+
+    print(f'\nConverted {total:,} proteins')
     print(f'Output: {output_file}')
 
 
@@ -200,12 +206,12 @@ if __name__ == '__main__':
     if len(sys.argv) <= 1:
         print('\nPlease provide dataset category and FASTA file.')
         print('\nUsage:')
-        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv]')
+        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv] [chunk_size]')
         sys.exit(1)
 
     if sys.argv[1] in ('-h', '--help'):
         print('\nUsage:')
-        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv]')
+        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv] [chunk_size]')
         print('\nDataset categories:')
         print('  uniprot')
         print('  uniparc')
@@ -215,7 +221,7 @@ if __name__ == '__main__':
     if len(sys.argv) < 3:
         print('\nError: Dataset category and FASTA file are required.')
         print('\nUsage:')
-        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv]')
+        print('parse_fasta.py <dataset_category> <input.fasta> [output.csv] [chunk_size]')
         sys.exit(1)
 
     dataset_category = sys.argv[1]
@@ -241,8 +247,18 @@ if __name__ == '__main__':
     if len(sys.argv) > 3:
         output_file = sys.argv[3]
 
+    chunk_size = CHUNK_SIZE
+    if len(sys.argv) > 4:
+        try:
+            chunk_size = int(sys.argv[4])
+        except ValueError:
+            print(f'\nError: chunk_size must be an integer, got: {sys.argv[4]}')
+            sys.exit(1)
+
+
     fasta_to_csv(
         input_file=input_file,
         output_file=output_file,
         dataset_category=dataset_category,
+        chunk_size=chunk_size
     )
