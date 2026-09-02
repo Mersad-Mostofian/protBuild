@@ -2,6 +2,7 @@ from collections import Counter, defaultdict
 from .word_freq_streaming import _build_word_freq_streaming, _iter_words_from_file
 from .packed_tuple import _pack, _unpack, PAIR_BASE
 from array import array
+from tqdm import tqdm
 import random
 import json
 
@@ -152,41 +153,44 @@ class BPETokenizer:
         pair_counts, pair_to_words = self._build_pair_statistics(words)
 
         next_id = len(self.vocab)
-        while next_id < vocab_size:
-            if not pair_counts:
-                break
-            best_packed, best_count = pair_counts.most_common(1)[0]
 
-            if best_count <= 0:
-                break
+        with tqdm(total=vocab_size-next_id, desc="Training BPE", unit="merge") as pbar:
+            while next_id < vocab_size:
+                if not pair_counts:
+                    break
+                best_packed, best_count = pair_counts.most_common(1)[0]
 
-            best_a, best_b = _unpack(best_packed)
-            new_id = next_id
-            self.bpe_merges[(best_a, best_b)] = new_id
-            self.merge_ranks[(best_a, best_b)] = len(self.merge_ranks)
+                if best_count <= 0:
+                    break
 
-            affected = pair_to_words.pop(best_packed, set())
-            pair_counts.pop(best_packed, None)
+                best_a, best_b = _unpack(best_packed)
+                new_id = next_id
+                self.bpe_merges[(best_a, best_b)] = new_id
+                self.merge_ranks[(best_a, best_b)] = len(self.merge_ranks)
 
-            for idx in affected:
-                w = words[idx]
+                affected = pair_to_words.pop(best_packed, set())
+                pair_counts.pop(best_packed, None)
 
-                for i in range(len(w) - 1):
-                    pair = _pack(w[i], w[i+1])
-                    pair_counts[pair] -= 1
-                    if pair_counts[pair] <= 0:
-                        pair_counts.pop(pair, None)
-                    pair_to_words[pair].discard(idx)
-                
+                for idx in affected:
+                    w = words[idx]
 
-                merged = self._merge_word(w, best_a, best_b, new_id)
-                words[idx] = merged
+                    for i in range(len(w) - 1):
+                        pair = _pack(w[i], w[i+1])
+                        pair_counts[pair] -= 1
+                        if pair_counts[pair] <= 0:
+                            pair_counts.pop(pair, None)
+                        pair_to_words[pair].discard(idx)
+                    
 
-                for i in range(len(merged)-1):
-                    pair = _pack(merged[i], merged[i+1])
-                    pair_counts[pair] += 1
-                    pair_to_words[pair].add(idx)
-            next_id += 1
+                    merged = self._merge_word(w, best_a, best_b, new_id)
+                    words[idx] = merged
+
+                    for i in range(len(merged)-1):
+                        pair = _pack(merged[i], merged[i+1])
+                        pair_counts[pair] += 1
+                        pair_to_words[pair].add(idx)
+                next_id += 1
+                pbar.update(1)
 
         for (a, b), new_id in self.bpe_merges.items():
             token_a = self.vocab[a]
@@ -290,7 +294,7 @@ class BPETokenizer:
             json.dump(self.vocab, file, ensure_ascii=False, indent=2)
 
         merges_list = []
-        for rank, (a,b), new_id in enumerate(self.bpe_merges.items()):
+        for rank, ((a,b), new_id) in enumerate(self.bpe_merges.items()):
             merges_list.append(
                 {
                     'pair': [a, b],
