@@ -6,7 +6,7 @@ from ml.src.models.common.normalization.normalization import Normalization
 class GPT2(nn.Module):
     def __init__(self, emb_dim, d_out, vocab_size,
                   context_length, num_heads,
-                    n_layers, dropout, dkv_bias):
+                    n_layers, dropout, qkv_bias):
         super().__init__()
         self.tok_emb = nn.Embedding(vocab_size, emb_dim)
         self.pos_emb = nn.Embedding(context_length, emb_dim)
@@ -14,7 +14,7 @@ class GPT2(nn.Module):
         self.transformer_blocks = nn.Sequential(
             *[TransformerBlock(emb_dim=emb_dim, d_out=d_out,
              context_length=context_length, dropout=dropout,
-              num_heads=num_heads, dkv_bias=dkv_bias) 
+              num_heads=num_heads, dkv_bias=qkv_bias) 
             for _ in range(n_layers)]
         )
         self.norm = Normalization(emb_dim)
