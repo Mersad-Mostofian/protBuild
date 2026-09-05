@@ -15,9 +15,10 @@ def split(corpus_path, end_token, split_rate=0.9):
         end_token
     )
 
+    corpus_path_without_postfix = ''.join(corpus_path.split('.')[:-1])
     split_idx = int(number_of_proteins * split_rate)
-    train_path = corpus_path + '_train.txt'
-    val_path = corpus_path + '_val.txt'
+    train_path = corpus_path_without_postfix + '_train.txt'
+    val_path = corpus_path_without_postfix + '_val.txt'
 
     with open(train_path, 'w') as train_file, \
          open(val_path, 'w') as val_file:
@@ -35,6 +36,8 @@ def split(corpus_path, end_token, split_rate=0.9):
             else:
                 val_file.write(protein)
                 val_file.write(end_token)
+    with open(corpus_path_without_postfix+'_info.txt', 'w') as f:
+        f.write(f"{number_of_proteins}\n{split_rate}")
 
 if __name__ == '__main__':
 

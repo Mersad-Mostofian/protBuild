@@ -34,6 +34,15 @@ class BPETokenizer:
                 self.inverse_vocab[token] = token_id
 
     @staticmethod
+    def _convert_to_tuple(value):
+        if isinstance(value, list):
+            return tuple(
+                BPETokenizer._convert_to_tuple(item)
+                for item in value
+            )
+        return value
+
+    @staticmethod
     def _reservoir_sample(file_path, end_token, sample_size, seed=0):
         rng = random.Random(seed)
 
@@ -314,15 +323,27 @@ class BPETokenizer:
 
         with open(vocab_path, 'r', encoding='utf-8') as file:
             loaded_vocab = json.load(file)
-            self.vocab = {int(k): v for k, v in loaded_vocab.items()}
-            self.inverse_vocab = {v: int(k) for k, v in loaded_vocab.items()}
+
+            self.vocab = {
+                int(k): self._convert_to_tuple(v)
+                for k, v in loaded_vocab.items()
+            }
+
+            self.inverse_vocab = {
+                v: k
+                for k, v in self.vocab.items()
+            }
 
         with open(merges_path, 'r', encoding='utf-8') as file:
             merges_list = json.load(file)
+
             for default_rank, merge in enumerate(merges_list):
                 pair = tuple(merge['pair'])
                 new_id = merge['new_id']
                 rank = merge.get("rank", default_rank)
+
                 self.bpe_merges[pair] = new_id
                 self.merge_ranks[pair] = rank
+
+        return self
 

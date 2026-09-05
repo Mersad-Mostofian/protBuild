@@ -7,19 +7,18 @@ def calculate_loss_batch(input_batch, target_batch, model, device):
     return loss
 
 def calculate_loss_loader(data_loader, model, device, num_batches=None):
-    total_loss = 0
-    if len(data_loader) == 0:
-        return float('nan')
-    elif num_batches is None:
-        num_batches = len(data_loader)
-    else:
-        num_batches = min(num_batches, len(data_loader))
+    total_loss = 0.0
+    batch_count = 0
 
     for i, (input_batch, target_batch) in enumerate(data_loader):
-        if i < num_batches:
-            loss = calculate_loss_batch(input_batch, target_batch,
-                                         model, device)
-            total_loss += loss
-        else:
+        if num_batches is not None and i >= num_batches:
             break
-    return total_loss / num_batches
+        loss = calculate_loss_batch(input_batch, target_batch,
+                                     model, device)
+        total_loss += loss.item()
+        batch_count += 1
+
+    if batch_count == 0:
+        return float('nan')
+
+    return total_loss / batch_count
