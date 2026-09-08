@@ -11,13 +11,25 @@ def train_model(model, train_loader, val_loader, num_train, num_val, optimizer,
                    checkpoint_path='ml/src/training/checkpoint', save_file_name=None):
     train_losses, val_losses, track_tokens_seen = [], [], []
     tokens_seen, steps = 0, -1
+    start_epoch = 0
 
     checkpoint_file = os.path.join(
         checkpoint_path,
         save_file_name
     )
     if os.path.exists(checkpoint_file):
-        model.load_state_dict(torch.load(checkpoint_file, map_location=device, weights_only=True))
+        checkpoint = torch.load(
+            checkpoint_file,
+            map_location=device,
+            weights_only=False
+        )
+
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        start_epoch = checkpoint["epoch"] + 1
+        steps = checkpoint["steps"]
+        tokens_seen = checkpoint["tokens_seen"]
     model.to(device)
 
     train_batch_size = train_loader.batch_size
@@ -26,7 +38,7 @@ def train_model(model, train_loader, val_loader, num_train, num_val, optimizer,
     train_batches = (num_train + train_batch_size - 1) // train_batch_size
     val_batches = (num_val + val_batch_size - 1) // val_batch_size
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs, 1):
         model.train()
         progress_bar = tqdm(
             train_loader,
@@ -54,6 +66,13 @@ def train_model(model, train_loader, val_loader, num_train, num_val, optimizer,
                 print(f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
 
                 if save_file_name is not None:
-                    save_model(model, checkpoint_path, save_file_name)
+                    checkpoint = {
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "epoch": epoch,
+                        "steps": steps,
+                        "tokens_seen": tokens_seen,
+                    }
+                    save_model(checkpoint, checkpoint_path, save_file_name)
 
     return train_losses, val_losses, track_tokens_seen
