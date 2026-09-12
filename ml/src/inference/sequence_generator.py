@@ -16,7 +16,7 @@ def generate_sequnce(
         logits = logits[:, -1, :]
 
         if topk is not None:
-            top_logits, _ = torch,topk(logits, topk)
+            top_logits, _ = torch.topk(logits, topk)
             min_val = top_logits[:, -1]
             logits = torch.where(logits < min_val, torch.tensor(float('-inf')).to(logits.device), logits)
 
