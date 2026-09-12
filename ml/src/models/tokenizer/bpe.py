@@ -257,14 +257,19 @@ class BPETokenizer:
 
 
     def decode(self, token_ids):
+        def decode_token(token):
+            if isinstance(token, tuple):
+                return "".join(decode_token(part) for part in token)
+            return token
+        
         decoded = []
         for token_id in token_ids:
             token = self.vocab.get(token_id)
-            if token_id is None:
+            if token is None:
                 raise ValueError(
                     f"Token ID {token_id} not found in vocabulary."
                 )
-            decoded.append(token)
+            decoded.append(decode_token(token))
         return "".join(decoded)
 
     def tokenize(self, text):
