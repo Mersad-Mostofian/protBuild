@@ -15,4 +15,5 @@ datasets/uniprot/
 *.fasta
 *.csv
 *.txt
-*.json
+*.json*
+*.pkl

@@ -87,3 +87,119 @@ def train_model(model, train_loader, val_loader, train_val_loader, optimizer, sc
                     save_model(checkpoint, checkpoint_path, save_file_name)
     
     return train_losses, val_losses, track_tokens_seen
+
+
+def train_model_protein2text(model, train_loader, val_loader, optimizer, scheduler,
+                 device, num_epochs, eval_freq, eval_iter):
+    train_losses, val_losses = [], []
+    steps = 0
+
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
+    model.to(device)
+
+    for epoch in range(num_epochs):
+        model.train()
+
+        running_train_loss = 0.0 
+        running_train_steps = 0
+
+        progress_bar = tqdm(
+            train_loader,
+            desc=f"Epoch {epoch + 1}/{num_epochs}",
+            unit="batch"
+        )
+        for batch in progress_bar:
+
+            protein_ids = batch['protein_ids'].to(device, non_blocking=True)
+            protein_attention_mask = batch['protein_attention_mask'].to(device, non_blocking=True)
+            text_idxs = batch['text_idxs'].to(device, non_blocking=True)
+            attention_mask = batch['attention_mask'].to(device, non_blocking=True)
+            labels = batch['labels'].to(device, non_blocking=True)
+            optimizer.zero_grad()
+
+            output = model(
+                protein_ids=protein_ids,
+                protein_attention_mask=protein_attention_mask,
+                text_idxs=text_idxs,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
+            loss = output.loss
+            loss.backward()
+            optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
+            loss_value = loss.item()
+            running_train_loss += loss_value
+            running_train_steps += 1
+            steps += 1
+
+            progress_bar.set_postfix(loss=f"{loss_value:.3f}")
+
+            if steps % eval_freq == 0:
+                model.eval()
+                total_val_loss = 0.0
+                num_val_batches = 0
+
+                with torch.no_grad():
+                    for i, batch in enumerate(val_loader):
+                        if i >= eval_iter:
+                            break
+                        protein_ids = batch[
+                            "protein_ids"
+                        ].to(device, non_blocking=True)
+
+                        protein_attention_mask = batch[
+                            "protein_attention_mask"
+                        ].to(device, non_blocking=True)
+
+                        text_idxs = batch[
+                            "text_idxs"
+                        ].to(device, non_blocking=True)
+
+                        attention_mask = batch[
+                            "attention_mask"
+                        ].to(device, non_blocking=True)
+
+                        labels = batch[
+                            "labels"
+                        ].to(device, non_blocking=True)
+
+                        output = model(
+                            protein_ids=protein_ids,
+                            protein_attention_mask=protein_attention_mask,
+                            text_idxs=text_idxs,
+                            attention_mask=attention_mask,
+                            labels=labels,
+                        )
+                        total_val_loss += output.loss.item()
+                        num_val_batches += 1  
+                
+                if num_val_batches > 0:
+                    val_loss = (
+                        total_val_loss / num_val_batches
+                    )
+                else:
+                    val_loss = float('nan')
+
+                if running_train_steps > 0:
+                    train_loss = (
+                        running_train_loss / running_train_steps
+                    )
+                else:
+                    train_loss = float('nan')
+
+
+                train_losses.append(train_loss)
+                val_losses.append(val_loss)
+                print(f"Epoch {epoch+1} (Step {steps}):")
+                print(f"Train loss {train_loss:.3f}, Val loss {val_loss:.3f}")
+                print(f"Train perplexity {math.exp(train_loss):.3f}, Val perplexity {math.exp(val_loss):.3f}")
+
+                running_train_loss = 0.0
+                running_train_steps = 0
+                model.train()
+
+    
+    return train_losses, val_losses

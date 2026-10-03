@@ -1,7 +1,10 @@
 from .read_file import _read_chunk_by_chunk_from_offset
 from torch.utils.data import IterableDataset
 from torch.utils.data import get_worker_info
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import Dataset
 import random
+import json
 import torch
 
 class ProteinDataset(IterableDataset):
@@ -67,3 +70,87 @@ class ProteinDataset(IterableDataset):
                 self.position_array[worker_id] = yielded[2]
                 self.idx_array[worker_id] = yielded[3]
             yield yielded[0], yielded[1]
+
+class ProteinTextDataset(IterableDataset):
+    def __init__(self, path, protein_tokenizer,
+                  text_tokenizer, max_protein_len=1024,
+                    max_text_len=256):
+        self.path = path
+        self.protein_tokenizer = protein_tokenizer
+        self.text_tokenizer = text_tokenizer
+        self.max_protein_len = max_protein_len
+        self.max_text_len = max_text_len
+
+    def __iter__(self):
+        worker_info = get_worker_info()
+        if worker_info is None:
+            worker_id = 0
+            num_workers = 1
+        else:
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+
+        with open(self.path, 'r') as f:
+            for idx, line in enumerate(f):
+                if idx % num_workers != worker_id:
+                    continue
+                
+                item = json.loads(line)
+                protein_enc = self.protein_tokenizer(
+                    item['sequence'],
+                    truncation=True,
+                    max_length=self.max_protein_len,
+                    padding=False,
+                    return_tensors=None,
+                )
+
+                text_enc = self.text_tokenizer(
+                    item['description'],
+                    truncation=True,
+                    max_length=self.max_text_len,
+                    padding=False,
+                    return_tensors=None,
+                )
+
+                protein_ids = torch.tensor(protein_enc['input_ids'], dtype=torch.long)
+                text_ids = torch.tensor(text_enc['input_ids'], dtype=torch.long)
+                yield {
+                    "protein_ids": protein_ids,
+                    "text_ids": text_ids,
+                    "protein_len": protein_ids.size(0),
+                    "text_len": text_ids.size(0),
+                }
+
+
+def make_collate_fn(protein_pad_id, text_pad_id, ignore_index=-100):
+    def collate_fn(batch):
+        protein_ids = [b['protein_ids']for b in batch]
+        text_ids = [b['text_ids'] for b in batch]
+        protein_lens = torch.tensor([b['protein_len'] for b in batch])
+        text_lens = torch.tensor([b['text_len'] for b in batch])
+
+        protein_ids = pad_sequence(protein_ids, batch_first=True, padding_value=protein_pad_id)
+        text_ids = pad_sequence(text_ids, batch_first=True, padding_value=text_pad_id)
+
+        B, P = protein_ids.shape
+        _, T = text_ids.shape
+
+        protein_arange = torch.arange(P).unsqueeze(0)
+        protein_attn_mask = (protein_arange < protein_lens.unsqueeze(1)).long()
+
+        text_arange = torch.arange(T).unsqueeze(0)
+        text_valid_mask = text_arange < text_lens.unsqueeze(1)
+        text_attn_mask = text_valid_mask.long()
+
+
+        text_labels = text_ids.clone()
+        text_labels[~text_valid_mask] = ignore_index
+
+        return {
+            "protein_ids": protein_ids,
+            "text_idxs": text_ids,
+            "protein_attention_mask": protein_attn_mask,
+            "attention_mask": text_attn_mask,
+            "labels": text_labels
+        }
+    return collate_fn
