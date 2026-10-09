@@ -74,12 +74,19 @@ class ProteinDataset(IterableDataset):
 class ProteinTextDataset(IterableDataset):
     def __init__(self, path, protein_tokenizer,
                   text_tokenizer, max_protein_len=1024,
-                    max_text_len=256):
+                    max_text_len=256, resume_state=None,
+                    position_array=None, idx_array=None):
+        super().__init__()
+        
         self.path = path
         self.protein_tokenizer = protein_tokenizer
         self.text_tokenizer = text_tokenizer
         self.max_protein_len = max_protein_len
         self.max_text_len = max_text_len
+        self.resume_state = resume_state or {}
+
+        self.position_array = position_array
+        self.idx_array = idx_array
 
     def __iter__(self):
         worker_info = get_worker_info()
@@ -90,8 +97,17 @@ class ProteinTextDataset(IterableDataset):
             worker_id = worker_info.id
             num_workers = worker_info.num_workers
 
+        start_offset, start_idx = self.resume_state.get(worker_id, (0, 0))
+
         with open(self.path, 'r') as f:
-            for idx, line in enumerate(f):
+            f.seek(start_offset)
+            idx = start_idx
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                current_position = f.tell()
+
                 if idx % num_workers != worker_id:
                     continue
                 
@@ -114,12 +130,19 @@ class ProteinTextDataset(IterableDataset):
 
                 protein_ids = torch.tensor(protein_enc['input_ids'], dtype=torch.long)
                 text_ids = torch.tensor(text_enc['input_ids'], dtype=torch.long)
+
+                if self.position_array is not None:
+                    self.position_array[worker_id] = current_position
+                if self.idx_array is not None:
+                    self.idx_array[worker_id] = idx + 1
+
                 yield {
                     "protein_ids": protein_ids,
                     "text_ids": text_ids,
                     "protein_len": protein_ids.size(0),
                     "text_len": text_ids.size(0),
                 }
+                idx += 1
 
 
 def make_collate_fn(protein_pad_id, text_pad_id, ignore_index=-100):
