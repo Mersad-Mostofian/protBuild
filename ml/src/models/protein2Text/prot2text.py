@@ -64,6 +64,7 @@ class Prot2Text(nn.Module):
 
         generated_ids = self.llm_model.generate(
             input_ids=text_ids,
+            attention_mask=torch.ones_like(text_ids),
             encoder_hidden_states=protein_memory,
             encoder_attention_mask=protein_attention_mask,
             max_new_tokens=max_new_tokens,

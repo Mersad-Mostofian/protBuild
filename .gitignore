@@ -7,7 +7,7 @@ __pycache__/
 
 # Model chaeckpoints
 ml/checkpoints/
-*.pth
+*.pt*
 
 # Datasets
 datasets/converted/
@@ -17,3 +17,4 @@ datasets/uniprot/
 *.txt
 *.json*
 *.pkl
+*.parquet
