@@ -145,7 +145,7 @@ class ProteinTextDataset(IterableDataset):
                 idx += 1
 
 
-def make_collate_fn(protein_pad_id, text_pad_id, ignore_index=-100):
+def make_collate_fn(protein_pad_id, text_pad_id, ignore_index=-100, model_type='p2t'):
     def collate_fn(batch):
         protein_ids = [b['protein_ids']for b in batch]
         text_ids = [b['text_ids'] for b in batch]
@@ -159,21 +159,28 @@ def make_collate_fn(protein_pad_id, text_pad_id, ignore_index=-100):
         _, T = text_ids.shape
 
         protein_arange = torch.arange(P).unsqueeze(0)
-        protein_attn_mask = (protein_arange < protein_lens.unsqueeze(1)).long()
+        protein_valid_mask = protein_arange < protein_lens.unsqueeze(1)
+        protein_attention_mask = protein_valid_mask.long()
 
         text_arange = torch.arange(T).unsqueeze(0)
         text_valid_mask = text_arange < text_lens.unsqueeze(1)
         text_attn_mask = text_valid_mask.long()
 
+        if model_type == 'p2t':
+            labels = text_ids.clone()
+            labels[~text_valid_mask] = ignore_index
+        elif model_type == 't2p':
+            labels = protein_ids.clone()
+            labels[~protein_valid_mask] = ignore_index
+        else:
+            labels = None
 
-        text_labels = text_ids.clone()
-        text_labels[~text_valid_mask] = ignore_index
 
         return {
             "protein_ids": protein_ids,
             "text_idxs": text_ids,
-            "protein_attention_mask": protein_attn_mask,
+            "protein_attention_mask": protein_attention_mask,
             "attention_mask": text_attn_mask,
-            "labels": text_labels
+            "labels": labels
         }
     return collate_fn

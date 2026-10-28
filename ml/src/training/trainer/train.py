@@ -94,7 +94,7 @@ def train_model(model, train_loader, val_loader, train_val_loader, optimizer, sc
 
 def train_model_protein2text(model, tokenizer, train_dataset, val_loader, optimizer, scheduler,
                  device, num_epochs, eval_freq, eval_iter, train_position_array, train_idx_array, 
-                 checkpoint_iter, collate_fn, checkpoint_path=None, save_file_name=None, num_workers=1, batch_size=1, max_new_tokens=256):
+                 checkpoint_iter, collate_fn, checkpoint_path=None, save_file_name=None, num_workers=1, batch_size=1, max_new_tokens=256, model_type='p2t'):
     metrics_history = dict()
     steps = 0
 
@@ -174,7 +174,6 @@ def train_model_protein2text(model, tokenizer, train_dataset, val_loader, optimi
 
     bleu_metric = BLEUScore(n_gram=4)
     rouge_metric = ROUGEScore()
-    bert_metric = BERTScore(model_name_or_path="bert-base-uncased")
 
 
     for epoch in range(start_epoch, num_epochs):
@@ -258,11 +257,20 @@ def train_model_protein2text(model, tokenizer, train_dataset, val_loader, optimi
                         total_val_loss += output.loss.item()
                         num_val_batches += 1  
 
-                        generated_ids = model.generate(
-                            protein_ids=protein_ids,
-                            protein_attention_mask=protein_attention_mask,
-                            max_new_tokens=max_new_tokens,
-                        )
+                        if model_type == 'p2t':
+                            generated_ids = model.generate(
+                                protein_ids=protein_ids,
+                                protein_attention_mask=protein_attention_mask,
+                                max_new_tokens=max_new_tokens,
+                            )
+                        elif model_type == 't2p':
+                            generated_ids = model.generate(
+                                text_idxs=text_idxs,
+                                attention_mask=attention_mask,
+                                max_new_tokens=max_new_tokens,
+                            )
+                        else:
+                            raise Exception("Error: model type not valid!")
 
                         preds = tokenizer.batch_decode(
                             generated_ids,
@@ -303,18 +311,10 @@ def train_model_protein2text(model, tokenizer, train_dataset, val_loader, optimi
                     references
                 )
 
-                bert_scores = bert_metric(
-                    predictions,
-                    references
-                )
-
                 bleu_value = bleu_score.item()
                 rouge1_value = rouge_scores['rouge1_fmeasure'].item()
                 rouge2_value = rouge_scores['rouge2_fmeasure'].item()
                 rougeL_value = rouge_scores['rougeL_fmeasure'].item()
-                bert_precision = bert_scores['precision'].mean().item()
-                bert_recall = bert_scores['recall'].mean().item()
-                bert_f1 = bert_scores['f1'].mean().item()
                 train_perplexity = math.exp(train_loss)
                 val_perplexity = math.exp(val_loss)
 
@@ -327,9 +327,6 @@ def train_model_protein2text(model, tokenizer, train_dataset, val_loader, optimi
                     'rouge1': rouge1_value,
                     'rouge2': rouge2_value,
                     'rougeL': rougeL_value,
-                    'bertscore_precision': bert_precision,
-                    'bertscore_recall': bert_recall,
-                    'bertscore_f1': bert_f1
                 }
 
                 print(f"Epoch {epoch+1} (Step {steps}):")
@@ -339,9 +336,6 @@ def train_model_protein2text(model, tokenizer, train_dataset, val_loader, optimi
                 print(f"ROUGE-1 F1: {rouge1_value:.4f}")
                 print(f"ROUGE-2 F1: {rouge2_value:.4f}")
                 print(f"ROUGE-L F1: {rougeL_value:.4f}")
-                print(f"BERTScore Precision: {bert_precision:.4f}")
-                print(f"BERTScore Recall: {bert_recall:.4f}")
-                print(f"BERTScore F1: {bert_f1:.4f}")
 
                 running_train_loss = 0.0
                 running_train_steps = 0

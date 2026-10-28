@@ -51,3 +51,37 @@ def generate_protein(model, prompt, tokenizer,
                             temperature=temperature, topk=topk)
 
     return tokenizer.decode(idx[0].tolist())
+
+
+@torch.no_grad()
+def predict_protein_sequence(
+        model, protein_tokenizer, text_tokenizer,
+        sequence: str, max_new_token: int = 1024,
+        max_length_text: int = 256, device=None 
+):
+    model.eval()
+    if device is None:
+        device = next(model.parameters()).device
+
+    text_inputs = text_tokenizer(
+        sequence,
+        return_tensors='pt',
+        truncation=True,
+        max_length=max_length_text,
+    )
+
+    text_ids = text_inputs['input_ids'].to(device)
+    text_attention_mask = text_inputs['attention_mask'].to(device)
+
+    generated_ids = model.generate(
+        text_idxs=text_ids,
+        attention_mask=text_attention_mask,
+        max_new_tokens=max_new_token
+    )
+
+    protein = protein_tokenizer.decode(
+        generated_ids[0],
+        skip_special_tokens=True,
+    )
+
+    return protein.strip()
